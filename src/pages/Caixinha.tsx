@@ -1,12 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export function Caixinha() {
   const [modalType, setModalType] = useState<'deposito' | 'saque' | null>(null);
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const [totalBalance, setTotalBalance] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submitTransaction = (e: React.FormEvent) => {
+  const fetchBalance = async () => {
+    setIsLoading(true);
+    const { data } = await supabase.from('caixinha_transactions').select('amount, type');
+    if (data) {
+      const balance = data.reduce((acc, curr) => {
+        return curr.type === 'deposit' ? acc + Number(curr.amount) : acc - Number(curr.amount);
+      }, 0);
+      setTotalBalance(balance);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchBalance();
+  }, []);
+
+  const submitTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -21,10 +41,28 @@ export function Caixinha() {
       return;
     }
 
-    alert(`${modalType === 'saque' ? 'Saque' : 'Depósito'} de R$ ${amount} registrado!`);
+    setIsSubmitting(true);
+    const numericAmount = Number(amount);
+    
+    const { error: insertError } = await supabase.from('caixinha_transactions').insert({
+      amount: numericAmount,
+      type: modalType === 'deposito' ? 'deposit' : 'withdrawal',
+      reason: modalType === 'saque' ? reason : null,
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    if (insertError) {
+      alert('Erro ao salvar transação: ' + insertError.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    await fetchBalance();
+    
     setModalType(null);
     setAmount('');
     setReason('');
+    setIsSubmitting(false);
   };
 
   return (
@@ -35,7 +73,9 @@ export function Caixinha() {
       <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center mb-8 relative overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
         <span className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Guardado para o Apê</span>
-        <h3 className="text-5xl font-black text-primary mt-3">R$ 15.000</h3>
+        <h3 className="text-5xl font-black text-primary mt-3">
+          {isLoading ? '...' : `R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+        </h3>
         <span className="text-xs bg-green-100 text-green-700 font-bold px-3 py-1 rounded-full mt-4">
           Estamos indo muito bem!
         </span>
@@ -94,11 +134,12 @@ export function Caixinha() {
             
             <button 
               type="submit" 
-              className={`w-full py-4 rounded-xl font-black text-white text-lg mt-2 tracking-wide shadow-md active:scale-[0.98] transition-all ${
+              disabled={isSubmitting}
+              className={`w-full py-4 rounded-xl font-black text-white text-lg mt-2 tracking-wide shadow-md active:scale-[0.98] transition-all disabled:opacity-50 ${
                 modalType === 'deposito' ? 'bg-primary hover:bg-blue-900' : 'bg-red-600 hover:bg-red-700'
               }`}
             >
-              {modalType === 'deposito' ? 'Confirmar Depósito' : 'Sim, preciso retirar o dinheiro'}
+              {isSubmitting ? 'Processando...' : (modalType === 'deposito' ? 'Confirmar Depósito' : 'Sim, preciso retirar o dinheiro')}
             </button>
             
             <button

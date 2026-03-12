@@ -20,6 +20,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Interfaces para tipagem
 interface CsvRow {
   'Mês/Ano': string;
+  'Ms/Ano'?: string; // Por causa do erro de codificação do arquivo CSV
   'Receita': string;
   'Gastos Pessoais Fixo 1': string;
   'Gastos Pessoais Fixo 2': string;
@@ -70,7 +71,7 @@ async function processCSV(filePath: string) {
   console.log('⏳ Lendo o arquivo CSV...');
 
   fs.createReadStream(filePath)
-    .pipe(csv({ separator: ',' })) // Se o seu CSV usar ponto-e-vírgula em vez de vírgula, troque aqui para ';'
+    .pipe(csv({ separator: ';' })) // Atualizado para usar ponto-e-vírgula em vez de vírgula
     .on('data', (data) => rows.push(data))
     .on('end', async () => {
       console.log(`✅ ${rows.length} linhas lidas do CSV. Iniciando o processamento...`);
@@ -85,12 +86,15 @@ async function processCSV(filePath: string) {
         }
 
         // Tentar sanitizar a data (padrão esperado para TIMESTAMP WITH TIME ZONE ou DATE: YYYY-MM-DD)
-        // Se a data vier como 01/04/2026, convertemos ou assumimos que já vem no formato certo.
-        let baseDate = row['Mês/Ano'];
-        if (baseDate.includes('/')) {
+        // Lidar com problemas de acentuação ('Mês/Ano' vs 'Ms/Ano') pegando a primeira coluna do objeto
+        let baseDate = row['Mês/Ano'] || row['Ms/Ano'] || Object.values(row)[0] as string;
+        
+        if (baseDate && baseDate.includes('/')) {
             const parts = baseDate.split('/');
             if (parts.length === 3) {
                 baseDate = `${parts[2]}-${parts[1]}-${parts[0]}`; // DD/MM/YYYY to YYYY-MM-DD
+            } else if (parts.length === 2) {
+                baseDate = `${parts[1]}-${parts[0]}-01`; // MM/YYYY to YYYY-MM-01
             }
         }
         
@@ -104,7 +108,7 @@ async function processCSV(filePath: string) {
           
           const receita = parseCurrency(row['Receita']);
           if (receita > 0) {
-            await supabase.from('transactions').insert({
+            const { error: err } = await supabase.from('transactions').insert({
               description: 'Salário Base',
               category: 'Renda',
               amount: receita,
@@ -113,11 +117,12 @@ async function processCSV(filePath: string) {
               date: baseDate,
               is_paid: true
             });
+            if(err) throw err;
           }
 
           const fixo1 = parseCurrency(row['Gastos Pessoais Fixo 1']);
           if (fixo1 > 0) {
-            await supabase.from('transactions').insert({
+            const { error: err } = await supabase.from('transactions').insert({
               description: 'Gasto Fixo Erick',
               category: 'Fixo',
               amount: fixo1,
@@ -126,11 +131,12 @@ async function processCSV(filePath: string) {
               date: baseDate,
               is_paid: true
             });
+            if(err) throw err;
           }
 
           const fixo2 = parseCurrency(row['Gastos Pessoais Fixo 2']);
           if (fixo2 > 0) {
-            await supabase.from('transactions').insert({
+            const { error: err } = await supabase.from('transactions').insert({
               description: 'Gasto Fixo Noiva',
               category: 'Fixo',
               amount: fixo2,
@@ -139,11 +145,12 @@ async function processCSV(filePath: string) {
               date: baseDate,
               is_paid: true
             });
+            if(err) throw err;
           }
 
           const var1 = parseCurrency(row['Gastos Pessoais Variaveis 1']);
           if (var1 > 0) {
-            await supabase.from('transactions').insert({
+            const { error: err } = await supabase.from('transactions').insert({
               description: 'Gasto Variável Erick',
               category: 'Variável',
               amount: var1,
@@ -152,11 +159,12 @@ async function processCSV(filePath: string) {
               date: baseDate,
               is_paid: true
             });
+            if(err) throw err;
           }
 
           const var2 = parseCurrency(row['Gastos Pessoais Variaveis 2']);
           if (var2 > 0) {
-            await supabase.from('transactions').insert({
+            const { error: err } = await supabase.from('transactions').insert({
               description: 'Gasto Variável Noiva',
               category: 'Variável',
               amount: var2,
@@ -165,6 +173,7 @@ async function processCSV(filePath: string) {
               date: baseDate,
               is_paid: true
             });
+            if(err) throw err;
           }
 
 
@@ -190,42 +199,46 @@ async function processCSV(filePath: string) {
               const anualAmount = valorConstrutora - mensalAmount;
 
               // Insere a parcela Mensal
-              await supabase.from('construction_payments').insert({
+              const { error: errMensal } = await supabase.from('construction_payments').insert({
                 payment_type: 'mensal',
                 amount: mensalAmount,
                 due_date: baseDate,
                 status: isPaidStatus ? 'pago' : 'pendente'
               });
+              if(errMensal) throw errMensal;
 
               // Insere a parcela Anual extraída
               if (anualAmount > 0) {
-                await supabase.from('construction_payments').insert({
+                const { error: errAnual } = await supabase.from('construction_payments').insert({
                   payment_type: 'anual',
                   amount: anualAmount,
                   due_date: baseDate,
                   status: isPaidStatus ? 'pago' : 'pendente'
                 });
+                if(errAnual) throw errAnual;
               }
             } else {
               // Fluxo normal (sem +)
-              await supabase.from('construction_payments').insert({
+              const { error: errNormal } = await supabase.from('construction_payments').insert({
                 payment_type: mapPaymentType(detalheConstrutora),
                 amount: valorConstrutora,
                 due_date: baseDate,
                 status: isPaidStatus ? 'pago' : 'pendente'
               });
+              if(errNormal) throw errNormal;
             }
           }
 
           // Inserir Juros de Obra (Registro separado)
           const jurosObra = parseCurrency(row['Juros de Obra']);
           if (jurosObra > 0) {
-            await supabase.from('construction_payments').insert({
+            const { error: errJuros } = await supabase.from('construction_payments').insert({
               payment_type: 'juros_obra',
               amount: jurosObra,
               due_date: baseDate,
               status: isPaidStatus ? 'pago' : 'pendente'
             });
+            if(errJuros) throw errJuros;
           }
 
 
@@ -233,12 +246,13 @@ async function processCSV(filePath: string) {
           
           const saldo = parseCurrency(row['Saldo do Mês']);
           if (saldo > 0) {
-            await supabase.from('caixinha_transactions').insert({
+            const { error: errCaixinha } = await supabase.from('caixinha_transactions').insert({
               amount: saldo,
               type: 'deposit',
               reason: 'Sobra do mês ' + baseDate,
               date: baseDate
             });
+            if(errCaixinha) throw errCaixinha;
           }
 
           console.log(`✅ Sucesso na linha: Mês/Ano = ${baseDate}`);

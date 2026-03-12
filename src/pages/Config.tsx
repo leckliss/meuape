@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export function Config() {
   const [partnerA] = useState('Erick');
@@ -7,16 +8,47 @@ export function Config() {
   const [incomeB, setIncomeB] = useState('3000.00');
   const [goal, setGoal] = useState('150000.00');
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    const saveScope = window.confirm('Deseja aplicar essa renda para os meses anteriores também? (Cancelar aplica apenas daqui em diante)');
-    
-    // Simulação de save
-    if(saveScope) {
-      alert('Configurações atualizadas para todo o histórico!');
-    } else {
-      alert('Configurações atualizadas apenas para o mês atual em diante.');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadSettings() {
+      const { data } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+      
+      if (data) {
+        setIncomeA(data.income_a.toString());
+        setIncomeB(data.income_b.toString());
+        setGoal(data.property_goal.toString());
+      }
+      setIsLoading(false);
     }
+    loadSettings();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    // Na vida real, o "saveScope" exigiria uma procedure SQL complexa ou script para alterar os transactions passados.
+    // Aqui apenas atualizamos a tabela settings principal.
+    const { error } = await supabase
+      .from('settings')
+      .update({
+        income_a: Number(incomeA),
+        income_b: Number(incomeB),
+        property_goal: Number(goal)
+      })
+      .eq('id', 1);
+
+    if (error) {
+      alert('Erro ao salvar as configurações: ' + error.message);
+    } else {
+      alert('Configurações atualizadas com sucesso no Supabase!');
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -74,10 +106,11 @@ export function Config() {
         </section>
 
         <button 
-          type="submit" 
-          className="w-full bg-primary hover:bg-blue-900 active:scale-95 transition-all text-white py-4 rounded-xl font-black text-lg shadow-md mb-8"
+          type="submit"
+          disabled={isLoading}
+          className="w-full bg-primary hover:bg-blue-900 active:scale-95 transition-all text-white py-4 rounded-xl font-black text-lg shadow-md mb-8 disabled:opacity-50"
         >
-          Salvar Alterações
+          {isLoading ? 'Salvando...' : 'Salvar Alterações'}
         </button>
       </form>
     </div>

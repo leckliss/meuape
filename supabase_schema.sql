@@ -1,8 +1,8 @@
--- Drop existing tables if they exist (cuidado ao rodar em produção!)
--- DROP TABLE IF EXISTS transactions;
--- DROP TABLE IF EXISTS caixinha_transactions;
--- DROP TABLE IF EXISTS construction_payments;
--- DROP TABLE IF EXISTS settings;
+-- Drop existing tables if they exist para evitar conflitos de "already exists"
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS caixinha_transactions;
+DROP TABLE IF EXISTS construction_payments;
+DROP TABLE IF EXISTS settings;
 
 -- 1. Tabela de Transações (Extrato / Rendas e Gastos)
 CREATE TABLE transactions (

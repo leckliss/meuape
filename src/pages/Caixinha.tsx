@@ -172,7 +172,11 @@ export function Caixinha() {
                   <p className="text-xs text-gray-500">
                     {new Date(t.created_at).toLocaleDateString('pt-BR')}
                   </p>
-                  {t.reason && <p className="text-xs text-red-500 mt-1 italic border-l-2 border-red-200 pl-2">{t.reason}</p>}
+                  {t.reason && (
+                    <p className={`text-xs mt-1 italic border-l-2 pl-2 ${t.type === 'deposit' ? 'text-green-600 border-green-200' : 'text-red-500 border-red-200'}`}>
+                      {t.reason}
+                    </p>
+                  )}
                 </div>
                 <p className={`font-black tracking-wide ${t.type === 'deposit' ? 'text-primary' : 'text-red-600'}`}>
                   {t.type === 'deposit' ? '+' : '-'} R$ {Number(t.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

@@ -206,8 +206,8 @@ export function Obra() {
 
       {/* Modal de transação da Obra */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl p-5 animate-in slide-in-from-bottom-full duration-300">
+        <div className="fixed inset-0 z-[100] bg-black/50 flex flex-col justify-end">
+          <div className="bg-white rounded-t-3xl p-5 pb-24 animate-in slide-in-from-bottom-full duration-300 max-h-screen overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">{editingId ? 'Editar Parcela' : 'Nova Parcela'}</h3>
             <form onSubmit={handleSave} className="space-y-4">
               <div className="flex gap-2 mb-2">

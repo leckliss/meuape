@@ -151,8 +151,8 @@ export function Config() {
 
       {/* Modal de Confirmação de Renda */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl p-6 animate-in slide-in-from-bottom-full duration-300 shadow-xl">
+        <div className="fixed inset-0 z-[100] bg-black/50 flex flex-col justify-end">
+          <div className="bg-white rounded-t-3xl p-6 pb-24 animate-in slide-in-from-bottom-full duration-300 shadow-xl max-h-screen overflow-y-auto">
             <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6"></div>
             <h3 className="text-xl font-black text-primary mb-2">Atualizar Salário Base</h3>
             <p className="text-sm text-gray-500 mb-6">

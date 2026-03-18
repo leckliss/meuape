@@ -24,6 +24,7 @@ export function Extrato() {
   const [category, setCategory] = useState('Geral');
   const [person, setPerson] = useState('Ambos');
   const [txDate, setTxDate] = useState('');
+  const [deductFromCaixinha, setDeductFromCaixinha] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Como os dados mock do CSV estão em 2026 e 2027, o default deveria ser uma data lá, mas vamos colocar a de hoje como base
@@ -98,6 +99,7 @@ export function Extrato() {
     setType('expense');
     setCategory('Geral');
     setPerson('Ambos');
+    setDeductFromCaixinha(false);
     
     // Tentar setar a data atual do mês que a pessoa está visualizando
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -148,6 +150,15 @@ export function Extrato() {
     } else {
       const { error } = await supabase.from('transactions').insert(payload);
       if (error) alert('Erro ao inserir: ' + error.message);
+
+      if (!error && type === 'expense' && deductFromCaixinha && !editingId) {
+        await supabase.from('caixinha_transactions').insert({
+          amount: numericAmount,
+          type: 'withdrawal',
+          reason: `Gasto no extrato: ${desc}`,
+          date: txDate
+        });
+      }
 
       // Vínculo cruzado com Dívida da Obra
       if (!error && type === 'expense') {
@@ -250,8 +261,8 @@ export function Extrato() {
 
       {/* Modal de transação */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl p-5 animate-in slide-in-from-bottom-full duration-300">
+        <div className="fixed inset-0 z-[100] bg-black/50 flex flex-col justify-end">
+          <div className="bg-white rounded-t-3xl p-5 pb-24 animate-in slide-in-from-bottom-full duration-300 max-h-screen overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">{editingId ? 'Editar Transação' : 'Nova Transação'}</h3>
             <form onSubmit={handleSave} className="space-y-4">
               <div className="flex gap-2 mb-2">
@@ -289,6 +300,18 @@ export function Extrato() {
                   </select>
                 </div>
               </div>
+
+              {type === 'expense' && !editingId && (
+                <label className="flex items-center gap-2 mt-2 text-sm font-bold text-gray-600 bg-gray-50 p-3 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors border border-gray-100">
+                  <input 
+                    type="checkbox" 
+                    checked={deductFromCaixinha}
+                    onChange={(e) => setDeductFromCaixinha(e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary/50" 
+                  />
+                  Abater direto do valor guardado na Caixinha
+                </label>
+              )}
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 font-bold rounded-xl active:scale-95 transition-all uppercase text-sm">Cancelar</button>

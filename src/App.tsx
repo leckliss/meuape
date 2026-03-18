@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Wallet, PiggyBank, Building2, Settings } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
@@ -40,9 +41,28 @@ function BottomNavigation() {
   );
 }
 
+function SplashScreen() {
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-primary transition-opacity duration-500">
+      <div className="text-7xl animate-bounce drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]">✨</div>
+      <h1 className="mt-8 text-2xl font-black text-white tracking-widest animate-pulse">
+        O APÊ A DOIS
+      </h1>
+    </div>
+  );
+}
+
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <BrowserRouter>
+      {showSplash && <SplashScreen />}
       <div className="flex flex-col min-h-screen bg-gray-50 pb-20 font-sans">
         <main className="flex-1 w-full max-w-md mx-auto relative shadow-sm bg-gray-50 overflow-y-auto">
           <Routes>

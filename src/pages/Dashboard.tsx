@@ -19,6 +19,25 @@ export function Dashboard() {
       const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
       const endOfMonth = `${year}-${month}-${lastDay}`;
 
+      // Auto-injetar salários se não existirem neste mês
+      const { data: salaryCheck } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('category', 'Salário')
+        .gte('date', startOfMonth)
+        .lte('date', endOfMonth)
+        .limit(1);
+
+      if (!salaryCheck || salaryCheck.length === 0) {
+        const { data: settings } = await supabase.from('settings').select('*').eq('id', 1).single();
+        if (settings) {
+          await supabase.from('transactions').insert([
+            { description: 'Salário Base', category: 'Salário', amount: settings.income_a, type: 'income', person: 'Erick', date: startOfMonth, is_paid: true },
+            { description: 'Salário Base', category: 'Salário', amount: settings.income_b, type: 'income', person: 'Rapha', date: startOfMonth, is_paid: true }
+          ]);
+        }
+      }
+
       // 1. Puxar as transações do mês
       const { data: txs } = await supabase
         .from('transactions')

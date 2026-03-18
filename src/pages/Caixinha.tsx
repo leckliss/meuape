@@ -7,17 +7,22 @@ export function Caixinha() {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [totalBalance, setTotalBalance] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchBalance = async () => {
     setIsLoading(true);
-    const { data } = await supabase.from('caixinha_transactions').select('amount, type');
+    const { data } = await supabase
+      .from('caixinha_transactions')
+      .select('*')
+      .order('created_at', { ascending: false });
     if (data) {
       const balance = data.reduce((acc, curr) => {
         return curr.type === 'deposit' ? acc + Number(curr.amount) : acc - Number(curr.amount);
       }, 0);
       setTotalBalance(balance);
+      setTransactions(data);
     }
     setIsLoading(false);
   };
@@ -152,6 +157,33 @@ export function Caixinha() {
           </form>
         </div>
       )}
+
+      {/* Histórico da Caixinha */}
+      <div className="mt-8">
+        <h3 className="font-bold text-gray-700 mb-4 px-2 tracking-wide">Histórico</h3>
+        <div className="space-y-3">
+          {transactions.length > 0 ? (
+            transactions.slice(0, 15).map(t => (
+              <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center zoom-in-95 animate-in duration-300">
+                <div>
+                  <p className="font-bold text-gray-800">
+                    {t.type === 'deposit' ? 'Guardado (+)' : 'Retirado (-)'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                  {t.reason && <p className="text-xs text-red-500 mt-1 italic border-l-2 border-red-200 pl-2">{t.reason}</p>}
+                </div>
+                <p className={`font-black tracking-wide ${t.type === 'deposit' ? 'text-primary' : 'text-red-600'}`}>
+                  {t.type === 'deposit' ? '+' : '-'} R$ {Number(t.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            ))
+          ) : (
+            !isLoading && <p className="text-center text-sm text-gray-500 py-6">Ainda não há histórico na caixinha.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

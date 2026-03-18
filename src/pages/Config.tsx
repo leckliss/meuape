@@ -3,12 +3,15 @@ import { supabase } from '../lib/supabase';
 
 export function Config() {
   const [partnerA] = useState('Erick');
-  const [partnerB] = useState('Noiva');
+  const [partnerB] = useState('Rapha');
   const [incomeA, setIncomeA] = useState('3500.00');
   const [incomeB, setIncomeB] = useState('3000.00');
+  const [originalIncomeA, setOriginalIncomeA] = useState('3500.00');
+  const [originalIncomeB, setOriginalIncomeB] = useState('3000.00');
   const [goal, setGoal] = useState('150000.00');
 
   const [isLoading, setIsLoading] = useState(true);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
@@ -20,7 +23,9 @@ export function Config() {
       
       if (data) {
         setIncomeA(data.income_a.toString());
+        setOriginalIncomeA(data.income_a.toString());
         setIncomeB(data.income_b.toString());
+        setOriginalIncomeB(data.income_b.toString());
         setGoal(data.property_goal.toString());
       }
       setIsLoading(false);
@@ -28,12 +33,23 @@ export function Config() {
     loadSettings();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
-    // Na vida real, o "saveScope" exigiria uma procedure SQL complexa ou script para alterar os transactions passados.
-    // Aqui apenas atualizamos a tabela settings principal.
+    // Se a renda mudou, e ainda não mostramos o modal, mostra o modal
+    if ((incomeA !== originalIncomeA || incomeB !== originalIncomeB) && e) {
+      setShowConfirmModal(true);
+      return;
+    }
+    
+    await executeSave(false);
+  };
+
+  const executeSave = async (applyToPast: boolean) => {
+    setIsLoading(true);
+    setShowConfirmModal(false);
+
+    // 1. Salvar configurações
     const { error } = await supabase
       .from('settings')
       .update({
@@ -43,10 +59,29 @@ export function Config() {
       })
       .eq('id', 1);
 
+    // 2. Atualizar transactions de Salário, se houver
+    if (incomeA !== originalIncomeA || incomeB !== originalIncomeB) {
+      const now = new Date();
+      const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      
+      // Update Salário Erick
+      let queryA = supabase.from('transactions').update({ amount: Number(incomeA) }).eq('category', 'Salário').eq('person', 'Erick');
+      if (!applyToPast) queryA = queryA.gte('date', firstDay);
+      await queryA;
+
+      // Update Salário Rapha
+      let queryB = supabase.from('transactions').update({ amount: Number(incomeB) }).eq('category', 'Salário').eq('person', 'Rapha');
+      if (!applyToPast) queryB = queryB.gte('date', firstDay);
+      await queryB;
+
+      setOriginalIncomeA(incomeA);
+      setOriginalIncomeB(incomeB);
+    }
+
     if (error) {
       alert('Erro ao salvar as configurações: ' + error.message);
     } else {
-      alert('Configurações atualizadas com sucesso no Supabase!');
+      alert('Configurações atualizadas com sucesso!');
     }
     setIsLoading(false);
   };
@@ -113,6 +148,40 @@ export function Config() {
           {isLoading ? 'Salvando...' : 'Salvar Alterações'}
         </button>
       </form>
+
+      {/* Modal de Confirmação de Renda */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex flex-col justify-end">
+          <div className="bg-white rounded-t-3xl p-6 animate-in slide-in-from-bottom-full duration-300 shadow-xl">
+            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6"></div>
+            <h3 className="text-xl font-black text-primary mb-2">Atualizar Salário Base</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Você alterou o valor da renda base. Deseja que essa alteração reflita em todos os meses anteriores no extrato, ou apenas deste mês em diante?
+            </p>
+            
+            <div className="space-y-3">
+              <button 
+                onClick={() => executeSave(false)} 
+                className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-md active:scale-95 transition-all"
+              >
+                Apenas deste mês em diante
+              </button>
+              <button 
+                onClick={() => executeSave(true)} 
+                className="w-full py-4 bg-gray-100 text-primary font-bold rounded-xl active:scale-95 transition-all"
+              >
+                Aplicar para todo o passado
+              </button>
+              <button 
+                onClick={() => setShowConfirmModal(false)} 
+                className="w-full py-3 text-gray-400 font-bold uppercase text-xs tracking-wider pt-2"
+              >
+                Cancelar Edição
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { LayoutDashboard, Wallet, PiggyBank, Building2, Settings } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Caixinha } from './pages/Caixinha';
@@ -61,8 +62,9 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      {showSplash && <SplashScreen />}
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023758362635-c0880h639it422rftt4d0u6m3m83p401.apps.googleusercontent.com'}>
+      <BrowserRouter>
+        {showSplash && <SplashScreen />}
       <div className="flex flex-col min-h-screen bg-gray-50 pb-20 font-sans">
         <main className="flex-1 w-full max-w-md mx-auto relative shadow-sm bg-gray-50 overflow-y-auto">
           <Routes>
@@ -77,6 +79,7 @@ export default function App() {
           <BottomNavigation />
         </div>
       </div>
-    </BrowserRouter>
+      </BrowserRouter>
+    </GoogleOAuthProvider>
   );
 }

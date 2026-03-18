@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { useGoogleLogin } from '@react-oauth/google';
 
 interface Transaction {
   id: string;
@@ -9,6 +10,8 @@ interface Transaction {
   type: string;
   person: string;
   date: string;
+  is_deducted: boolean;
+  receipt_url?: string;
 }
 
 export function Extrato() {
@@ -24,8 +27,56 @@ export function Extrato() {
   const [category, setCategory] = useState('Geral');
   const [person, setPerson] = useState('Ambos');
   const [txDate, setTxDate] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
   const [deductFromCaixinha, setDeductFromCaixinha] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // Integração com Google Drive
+  const uploadToGoogleDrive = async (file: File, token: string) => {
+    setUploadingFile(true);
+    const metadata = {
+      name: file.name,
+      mimeType: file.type,
+      // Se tiver ID da pasta pai, poderia usar: parents: ['FOLDER_ID']
+    };
+    
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
+    
+    try {
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (data.webViewLink) setReceiptUrl(data.webViewLink);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao enviar arquivo pro Google Drive.');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const loginForUpload = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      if (fileInputRef.current?.files?.[0]) {
+        uploadToGoogleDrive(fileInputRef.current.files[0], tokenResponse.access_token);
+      }
+    },
+    scope: 'https://www.googleapis.com/auth/drive.file'
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      loginForUpload(); // Chamar login para pegar o token assim que selecionam o arquivo
+    }
+  };
 
   // Como os dados mock do CSV estão em 2026 e 2027, o default deveria ser uma data lá, mas vamos colocar a de hoje como base
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -61,6 +112,18 @@ export function Extrato() {
       }
     }
 
+    // 2. Fetch caixinha withdrawals this month mapped to extrato
+    const { data: caixinhaWithdrawals } = await supabase
+      .from('caixinha_transactions')
+      .select('reason')
+      .eq('type', 'withdrawal')
+      .gte('date', startOfMonth)
+      .lte('date', endOfMonth);
+
+    const deductedDescs = new Set(
+      caixinhaWithdrawals?.map(w => w.reason.replace('Gasto no extrato: ', '')) || []
+    );
+
     const { data } = await supabase
       .from('transactions')
       .select('*')
@@ -68,7 +131,13 @@ export function Extrato() {
       .lte('date', endOfMonth)
       .order('date', { ascending: false });
       
-    if (data) setTransactions(data);
+    if (data) {
+      const enrichedData = data.map(t => ({
+        ...t,
+        is_deducted: deductedDescs.has(t.description)
+      }));
+      setTransactions(enrichedData);
+    }
     setIsLoading(false);
   };
 
@@ -77,6 +146,7 @@ export function Extrato() {
   }, [currentDate]);
 
   const restanteLivre = transactions.reduce((acc, curr) => {
+    if (curr.is_deducted && curr.type === 'expense') return acc; // Ignora gastos abatidos na caixinha
     return curr.type === 'income' ? acc + Number(curr.amount) : acc - Number(curr.amount);
   }, 0);
 
@@ -100,6 +170,7 @@ export function Extrato() {
     setCategory('Geral');
     setPerson('Ambos');
     setDeductFromCaixinha(false);
+    setReceiptUrl('');
     
     // Tentar setar a data atual do mês que a pessoa está visualizando
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -122,6 +193,7 @@ export function Extrato() {
     setCategory(t.category);
     setPerson(t.person);
     setTxDate(t.date);
+    setReceiptUrl(t.receipt_url || '');
     setIsModalOpen(true);
   };
 
@@ -141,7 +213,8 @@ export function Extrato() {
       category,
       person,
       date: txDate,
-      is_paid: true
+      is_paid: true,
+      receipt_url: receiptUrl || null
     };
 
     if (editingId) {
@@ -240,7 +313,11 @@ export function Extrato() {
                     {isIncome ? '📈' : '📉'}
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800">{t.description}</p>
+                    <div className="flex items-center gap-2">
+                      <p className={`font-bold ${t.is_deducted ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{t.description}</p>
+                      {t.is_deducted && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Pago com Caixinha</span>}
+                      {t.receipt_url && <span className="text-[10px] ml-1 bg-yellow-100 text-yellow-700 px-1 font-bold rounded">📎</span>}
+                    </div>
                     <p className="text-[11px] text-gray-500 font-medium capitalize">
                       {formatDateShort(t.date)} • {t.category} • {t.person}
                     </p>
@@ -298,6 +375,35 @@ export function Extrato() {
                     <option value="Erick">Erick</option>
                     <option value="Rapha">Rapha</option>
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Comprovante</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileChange} 
+                    className="hidden" 
+                  />
+                  {!receiptUrl ? (
+                    <button 
+                      type="button" 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-xl p-3 w-full text-center text-sm font-bold text-gray-400 hover:bg-gray-50 hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2"
+                    >
+                      {uploadingFile ? 'Enviando...' : '📎 Clicar para Anexar'}
+                    </button>
+                  ) : (
+                    <div className="border border-green-200 bg-green-50 rounded-xl p-3 w-full flex items-center justify-between">
+                      <span className="text-sm font-bold text-green-700 flex items-center gap-2">✓ Anexado</span>
+                      <div className="flex gap-2">
+                        <a href={receiptUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600 underline">Ver</a>
+                        <button type="button" onClick={() => { setReceiptUrl(''); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-xs font-bold text-red-500">Remover</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

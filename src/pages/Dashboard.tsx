@@ -41,21 +41,37 @@ export function Dashboard() {
       // 1. Puxar as transações do mês
       const { data: txs } = await supabase
         .from('transactions')
-        .select('amount, type')
+        .select('amount, type, description')
         .gte('date', startOfMonth)
         .lte('date', endOfMonth);
+
+      // 2. Fetch caixinha withdrawals this month mapped to extrato
+      const { data: caixinhaWithdrawals } = await supabase
+        .from('caixinha_transactions')
+        .select('reason')
+        .eq('type', 'withdrawal')
+        .gte('date', startOfMonth)
+        .lte('date', endOfMonth);
+
+      const deductedDescs = new Set(
+        caixinhaWithdrawals?.map(w => w.reason.replace('Gasto no extrato: ', '')) || []
+      );
 
       let income = 0;
       let expense = 0;
       
       if (txs) {
         txs.forEach(t => {
-          if (t.type === 'income') income += Number(t.amount);
-          if (t.type === 'expense') expense += Number(t.amount);
+          if (t.type === 'income') {
+            income += Number(t.amount);
+          } else if (t.type === 'expense' && !deductedDescs.has(t.description)) {
+            // Ignora o valor do expense que foi abatido pela caixinha
+            expense += Number(t.amount);
+          }
         });
       }
 
-      // 2. Puxar total guardado na caixinha
+      // 3. Puxar total guardado na caixinha
       const { data: cxTxs } = await supabase.from('caixinha_transactions').select('amount, type');
       let saved = 0;
       if (cxTxs) {
